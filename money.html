@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人記帳系統 v2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--blue:#1976d2;--blue2:#0d47a1;--red:#e53935;--bg:#f4f6f8;--card:#fff;--text:#202124;--muted:#6b7280;--line:#e5e7eb}
+*{box-sizing:border-box}body{font-family:"Microsoft JhengHei",system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px}.container{max-width:1200px;margin:auto}h1{margin:0 0 20px;color:var(--blue2)}.card{background:var(--card);padding:20px;margin-bottom:20px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}.summary .box{background:#fff;padding:20px;border-radius:14px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.07)}.summary h3{margin:0 0 8px;color:var(--muted);font-size:15px}.summary strong{font-size:28px}label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}input,select,button{font:inherit;padding:11px 12px;border-radius:8px;border:1px solid #cfd4dc;background:#fff}button{background:var(--blue);color:#fff;border:0;cursor:pointer;font-weight:700}button:hover{filter:brightness(.92)}button.secondary{background:#607d8b}.deleteBtn{background:var(--red);padding:8px 11px}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.file-label{display:inline-flex;align-items:center;padding:11px 14px;border-radius:8px;background:#2e7d32;color:#fff;cursor:pointer;font-weight:700}.file-label input{display:none}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:650px}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left}th{background:#f8fafc;position:sticky;top:0}td.amount{text-align:right;font-variant-numeric:tabular-nums}.empty{text-align:center;color:var(--muted);padding:30px}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px}.chart-box{position:relative;min-height:330px}.notice{font-size:13px;color:var(--muted);margin-top:10px}.detail-filter{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:0 0 16px}.detail-filter label{min-width:120px}.month-result{color:var(--muted);font-size:14px;padding-bottom:11px}.error{color:#b71c1c;background:#ffebee;padding:10px;border-radius:8px;display:none;margin-bottom:16px}@media(max-width:800px){body{padding:10px}.summary,.charts{grid-template-columns:1fr}.card{padding:15px}h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>💰 個人記帳系統 v2</h1>
+<div id="errorBox" class="error"></div>
+<div class="summary">
+  <div class="box"><h3>篩選後總支出</h3><strong id="totalAmount">$0</strong></div>
+  <div class="box"><h3>篩選後筆數</h3><strong id="totalCount">0</strong></div>
+  <div class="box"><h3>平均每筆</h3><strong id="averageAmount">$0</strong></div>
+</div>
+<div class="card">
+<h2>新增記帳</h2>
+<div class="grid">
+<label>日期<input type="date" id="date"></label>
+<label>類型<select id="category"></select></label>
+<label>金額<input type="number" id="amount" min="0" step="1" placeholder="例如：15000"></label>
+<label>備註<input type="text" id="note" placeholder="例如：房租"></label>
+<button id="addBtn" type="button">新增記錄</button>
+</div>
+</div>
+<div class="card">
+<h2>篩選查詢</h2>
+<div class="grid">
+<label>開始日期<input type="date" id="filterStart"></label>
+<label>結束日期<input type="date" id="filterEnd"></label>
+<label>類型<select id="filterCategory"><option value="">全部類型</option></select></label>
+<label>備註關鍵字<input type="search" id="keyword" placeholder="輸入關鍵字"></label>
+<button id="searchBtn" type="button">套用篩選</button>
+<button id="clearBtn" class="secondary" type="button">清除篩選</button>
+</div>
+</div>
+<div class="card">
+<h2>資料匯入與匯出</h2>
+<div class="actions">
+<button id="exportBtn" type="button">📤 匯出 Excel</button>
+<label class="file-label">📥 匯入 Excel / CSV<input type="file" id="importFile" accept=".xlsx,.xls,.csv"></label>
+<button id="backupBtn" class="secondary" type="button">下載 JSON 備份</button>
+</div>
+<div class="notice">匯入欄位格式：日期、類型、金額、備註。Excel 日期序號會自動轉換成 YYYY-MM-DD，既有的 45536 類型日期也會自動修復。</div>
+</div>
+<div class="card">
+<h2>記帳明細</h2>
+<div class="detail-filter">
+<label>年<select id="detailYear"></select></label>
+<label>月<select id="detailMonth"></select></label>
+<div id="detailMonthResult" class="month-result"></div>
+</div>
+<div class="table-wrap"><table><thead><tr><th>日期</th><th>類型</th><th>金額</th><th>備註</th><th>操作</th></tr></thead><tbody id="recordList"></tbody></table></div>
+</div>
+<div class="charts">
+<div class="card"><h2>📊 分類支出</h2><div class="chart-box"><canvas id="pieChart"></canvas></div></div>
+<div class="card"><h2>📈 每月支出趨勢</h2><div class="chart-box"><canvas id="lineChart"></canvas></div></div>
+</div>
+</div>
+<script>
+'use strict';
+const categories=["日常伙食","大餐","飲料","微笑馬三","保險","甜點咖啡","日常用品","保健食品","交通費","旅行","房屋費用","交際應酬","打扮漂亮","休閒娛樂","醫療費用","水電電信","所得稅","零食","抹布"];
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+function excelSerialToISO(serial){
+  const info=(typeof XLSX!=='undefined'&&XLSX.SSF)?XLSX.SSF.parse_date_code(Number(serial)):null;
+  if(info&&info.y&&info.m&&info.d)return `${info.y}-${pad(info.m)}-${pad(info.d)}`;
+  const ms=Math.round((Number(serial)-25569)*86400*1000);
+  const d=new Date(ms); return Number.isNaN(d.getTime())?'':`${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
+}
+function normalizeDate(value){
+  if(value===null||value===undefined||value==='')return '';
+  if(value instanceof Date&&!Number.isNaN(value.getTime()))return `${value.getFullYear()}-${pad(value.getMonth()+1)}-${pad(value.getDate())}`;
+  if(typeof value==='number'||/^\d{5}(\.\d+)?$/.test(String(value).trim()))return excelSerialToISO(Number(value));
+  const s=String(value).trim().replace(/[.]/g,'/').replace(/-/g,'/');
+  const m=s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  const parsed=new Date(s);
+  return Number.isNaN(parsed.getTime())?String(value):`${parsed.getFullYear()}-${pad(parsed.getMonth()+1)}-${pad(parsed.getDate())}`;
+}
+function loadRecords(){try{const data=JSON.parse(localStorage.getItem('records')||'[]');return Array.isArray(data)?data.map(r=>({date:normalizeDate(r.date??r['日期']),category:String(r.category??r.type??r['類型']??''),amount:Number(r.amount??r['金額']??0),note:String(r.note??r.item??r['備註']??'')})).filter(r=>r.date&&r.category&&Number.isFinite(r.amount)&&r.amount>0):[]}catch(e){return []}}
+let records=loadRecords(),pieChart=null,lineChart=null;
+function save(){localStorage.setItem('records',JSON.stringify(records))}
+function escapeHtml(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function showError(msg){$('errorBox').textContent=msg;$('errorBox').style.display='block'}
+function init(){categories.forEach(c=>{for(const id of ['category','filterCategory']){const o=document.createElement('option');o.value=c;o.textContent=c;$(id).appendChild(o)}});$('date').value=new Date().toLocaleDateString('sv-SE');initDetailMonthFilter();save();bind();render()}
+function initDetailMonthFilter(){const now=new Date(),currentYear=now.getFullYear(),currentMonth=now.getMonth()+1;const years=new Set(records.map(r=>Number(String(r.date).slice(0,4))).filter(Number.isFinite));years.add(currentYear);[...years].sort((a,b)=>b-a).forEach(y=>{const o=document.createElement('option');o.value=String(y);o.textContent=`${y} 年`;$('detailYear').appendChild(o)});for(let m=1;m<=12;m++){const o=document.createElement('option');o.value=pad(m);o.textContent=`${m} 月`;$('detailMonth').appendChild(o)}$('detailYear').value=String(currentYear);$('detailMonth').value=pad(currentMonth)}
+function bind(){
+ $('addBtn').addEventListener('click',addRecord);$('searchBtn').addEventListener('click',render);$('clearBtn').addEventListener('click',()=>{$('filterStart').value='';$('filterEnd').value='';$('filterCategory').value='';$('keyword').value='';render()});$('exportBtn').addEventListener('click',exportExcel);$('backupBtn').addEventListener('click',backupJSON);$('importFile').addEventListener('change',importExcel);$('keyword').addEventListener('input',render);$('detailYear').addEventListener('change',render);$('detailMonth').addEventListener('change',render);
+}
+function addRecord(){const rec={date:normalizeDate($('date').value),category:$('category').value,amount:Number($('amount').value),note:$('note').value.trim()};if(!rec.date||!rec.category||!Number.isFinite(rec.amount)||rec.amount<=0){alert('請輸入正確的日期、類型與金額');return}records.push(rec);save();$('amount').value='';$('note').value='';render()}
+window.deleteRecord=function(i){if(confirm('確定刪除這筆資料嗎？')){records.splice(i,1);save();render()}};
+function getFiltered(){const start=$('filterStart').value,end=$('filterEnd').value,cat=$('filterCategory').value,key=$('keyword').value.trim().toLowerCase();return records.map((r,index)=>({...r,index})).filter(r=>(!start||r.date>=start)&&(!end||r.date<=end)&&(!cat||r.category===cat)&&(!key||(r.note||'').toLowerCase().includes(key)||(r.category||'').toLowerCase().includes(key))).sort((a,b)=>b.date.localeCompare(a.date)||b.index-a.index)}
+function render(){const data=getFiltered();const total=data.reduce((s,r)=>s+Number(r.amount||0),0);$('totalAmount').textContent='$'+total.toLocaleString('zh-TW');$('totalCount').textContent=data.length.toLocaleString('zh-TW');$('averageAmount').textContent='$'+(data.length?Math.round(total/data.length):0).toLocaleString('zh-TW');const selectedMonth=`${$('detailYear').value}-${$('detailMonth').value}`;const detailData=data.filter(r=>String(r.date).slice(0,7)===selectedMonth);const detailTotal=detailData.reduce((s,r)=>s+Number(r.amount||0),0);$('detailMonthResult').textContent=`顯示 ${selectedMonth}，共 ${detailData.length.toLocaleString('zh-TW')} 筆，合計 $${detailTotal.toLocaleString('zh-TW')}`;$('recordList').innerHTML=detailData.length?detailData.map(r=>`<tr><td>${escapeHtml(normalizeDate(r.date))}</td><td>${escapeHtml(r.category)}</td><td class="amount">${Number(r.amount).toLocaleString('zh-TW')}</td><td>${escapeHtml(r.note)}</td><td><button class="deleteBtn" onclick="deleteRecord(${r.index})">刪除</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">這個月份目前沒有符合條件的資料</td></tr>';drawCharts(data)}
+function drawCharts(data){if(typeof Chart==='undefined'){showError('圖表套件未載入，請確認網路連線。記帳與本機儲存仍可使用。');return}const byCat={},byMonth={};data.forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+r.amount;const m=r.date.slice(0,7);byMonth[m]=(byMonth[m]||0)+r.amount});if(pieChart)pieChart.destroy();if(lineChart)lineChart.destroy();pieChart=new Chart($('pieChart'),{type:'doughnut',data:{labels:Object.keys(byCat),datasets:[{data:Object.values(byCat),backgroundColor:['#1976d2','#43a047','#f9a825','#e53935','#8e24aa','#00897b','#fb8c00','#6d4c41','#3949ab','#00acc1','#7cb342','#c0ca33','#d81b60','#5e35b1','#546e7a','#ef6c00','#2e7d32','#ad1457','#757575']}]},options:{responsive:true,maintainAspectRatio:false}});const months=Object.keys(byMonth).sort();lineChart=new Chart($('lineChart'),{type:'line',data:{labels:months,datasets:[{label:'支出',data:months.map(m=>byMonth[m]),borderColor:'#e53935',backgroundColor:'rgba(229,57,53,.12)',fill:true,tension:.25}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}})}
+function exportExcel(){if(typeof XLSX==='undefined'){alert('Excel 套件未載入，請確認網路連線');return}const rows=records.map(r=>({'日期':normalizeDate(r.date),'類型':r.category,'金額':r.amount,'備註':r.note||''}));const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:14},{wch:14},{wch:12},{wch:30}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'記帳資料');XLSX.writeFile(wb,`記帳資料_${new Date().toLocaleDateString('sv-SE')}.xlsx`)}
+async function importExcel(e){const file=e.target.files[0];if(!file)return;if(typeof XLSX==='undefined'){alert('Excel 套件未載入，請確認網路連線');return}try{const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array',cellDates:false});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});let added=0,skipped=0;const existing=new Set(records.map(r=>`${normalizeDate(r.date)}|${r.category}|${r.amount}|${r.note||''}`));for(const row of rows){const rec={date:normalizeDate(row['日期']??row.date),category:String(row['類型']??row.category??row.type??'').trim(),amount:Number(row['金額']??row.amount??0),note:String(row['備註']??row.note??row.item??'').trim()};const key=`${rec.date}|${rec.category}|${rec.amount}|${rec.note}`;if(!rec.date||!rec.category||!Number.isFinite(rec.amount)||rec.amount<=0||existing.has(key)){skipped++;continue}records.push(rec);existing.add(key);added++}save();render();alert(`匯入完成：新增 ${added} 筆，略過 ${skipped} 筆。`)}catch(err){alert('匯入失敗：'+err.message)}finally{e.target.value=''}}
+function backupJSON(){const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`記帳備份_${new Date().toLocaleDateString('sv-SE')}.json`;a.click();URL.revokeObjectURL(a.href)}
+init();
+</script>
+</body>
+</html>
